@@ -14,6 +14,9 @@
 #include <vector>
 #include <set>
 #include <condition_variable>
+#include <map>
+#include <iostream>
+
 
 class Question{
 public:
@@ -49,6 +52,36 @@ public:
 };
 
 
+class Room{
+public:
+    Player owner;
+    int RoomId;
+    int playerCount = 0;
+    std::unordered_set<int> playersInRoom;
+    
+    Room(Player ownr){
+        owner = ownr;
+        RoomId =owner.getPlayerID()*123;
+    }
+
+    ~Room(){
+        printf("Room destructor called\n");
+        playersInRoom.clear();
+    }
+
+    void addPlayer(int playerID){
+        playersInRoom.insert(playerID);
+        playerCount ++;
+    }
+
+    void removePlayer(int playerID){
+        playersInRoom.erase(playerID);
+        playerCount --;
+    }
+};
+
+
+
 // store player info
 // TODO: use int -> Player map instead
 Player players[100];
@@ -62,12 +95,18 @@ std::condition_variable onlinePlayersCv;
 
 std::condition_variable controlQuestionsCv;
 
+std::condition_variable startGameCv;
+
 // determines which controlQuestionsCv to notify
 int notifyFd = 0;
+int notifyRoomId = 0;
 
 // client sockets
 std::mutex clientFdsLock;
 std::unordered_set<int> clientFds;
+
+// game rooms
+std::map<int,Room> gameRooms;
 
 // handles SIGINT
 void ctrl_c(int);
@@ -94,6 +133,7 @@ void askQuestion(Question q);
 void questionHandler(Question q);
 
 void answearHandler(Question q);
+
 
 // converts cstring to port
 uint16_t readPort(char * txt);
@@ -125,7 +165,7 @@ int main(int argc, char ** argv){
     
     printf("Server started.\n");
 
-    printf("Listening ...\n");
+    printf("Listening  for connections...\n");
 
     // enter listening mode
     res = listen(servFd, 1);
@@ -257,7 +297,7 @@ void clientLoop(int clientFd, char * buffer){
         }
 
         if(strcmp(buffer,"1\n") == 0){
-            char menuMsg[] = "=== \"kahoot\" menu ===\n1.Create a quiz.\n2.Choose a quiz set\n3.Go back\n";
+            char menuMsg[] = "=== \"kahoot\" menu ===\n1.Create a room.\n2.Choose a quiz set\n3.Go back\n";
             if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
                 std::unique_lock<std::mutex> lock(clientFdsLock);
                 perror("Send error (menu)");
@@ -272,11 +312,48 @@ void clientLoop(int clientFd, char * buffer){
                 break;
             }
             if(strcmp(buffer,"1\n") == 0){
-                // createQuiz function
+                // createRoom function
+                Room r(players[clientFd]);
+                gameRooms.insert(std::pair<int,Room>(r.RoomId,r));
+                char menuMsg[255] = "Successfully created a room. Room id:";
+                strcat(menuMsg,std::to_string(r.RoomId).c_str());
+                strcat(menuMsg,"\n1.Start the game\n2.Exit\n===Awaiting players===\n");
+                if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    perror("Send error (menu)");
+                    clientFds.erase(clientFd);
+                    break;
+            }
                 strcpy(buffer,"\0");
-                continue; 
+                if(read(clientFd,buffer,255) < 0){
+                    perror("Read error (menu)");
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    clientFds.erase(clientFd);
+                    playersConnected --;
+                    break;
+                }
+
+                if(strcmp(buffer,"1\n") == 0){
+                    printf("Starting the game.\n");
+                    notifyRoomId = r.RoomId;
+                    startGameCv.notify_all();
+                    strcpy(buffer,"\0");
+                    continue;
+                }  
+
+                if(strcmp(buffer,"2\n") == 0){
+                    printf("Closing game room ...\n");
+                    gameRooms.erase(r.RoomId);
+                    strcpy(buffer,"\0");
+                    continue;
+                }  
             }
             if(strcmp(buffer,"2\n") == 0){
+                std::cout << "mymap contains:\n";
+                for (std::map<int,Room>::iterator it=gameRooms.begin(); it!=gameRooms.end(); ++it){
+                    printf("Key: %d Value: %d\n",it->first,it->second.owner.getPlayerID());
+                    printf("Player count: %d\n",it->second.playerCount);
+                }
                 // browse through quizzes
                 strcpy(buffer,"\0");
                 continue;
@@ -302,8 +379,60 @@ void clientLoop(int clientFd, char * buffer){
                 clientFds.erase(clientFd);
                 playersConnected --;
                 break;
-            } 
+            }
+            bool roomExists = false;
+            Room* currentRoom;
+            for (std::map<int,Room>::iterator it=gameRooms.begin(); it!=gameRooms.end(); ++it){
+                if(atoi(buffer) == it->first){
+                    currentRoom = &it->second;
+                    roomExists = true;
+                    it->second.addPlayer(clientFd);
+                    char menuMsg[255] = "Player ";
+                    strcat(menuMsg,players[clientFd].getNickname().c_str());
+                    strcat(menuMsg," has joined your room !\n");
+                    if(send(it->second.owner.getPlayerID(), menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
+                        std::unique_lock<std::mutex> lock(clientFdsLock);
+                        perror("Send error (menu)");
+                        clientFds.erase(it->second.owner.getPlayerID());
+                        break;
+                    }
+                    break;
+                }
+            }
+            if(!roomExists){
+                char menuMsg[] = "Room does not exist.\n";
+                if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    perror("Send error (menu)");
+                    clientFds.erase(clientFd);
+                    break;
+                }
+            }
+            else{
+            char menuMsg2[255] = "You have joined the room. Room id:";
+            strcat(menuMsg2,std::to_string(currentRoom->RoomId).c_str());
+            strcat(menuMsg2,"\nWaiting for the game to start.\n");
+            if(send(clientFd, menuMsg2, strlen(menuMsg2)+1, MSG_DONTWAIT) != (int)strlen(menuMsg2) + 1){
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                perror("Send error (menu)");
+                clientFds.erase(clientFd);
+                break;
+            }
+            
+            //std::unique_lock<std::mutex> lock1;
+            //startGameCv.wait(lock1,[currentRoom] { return (currentRoom->RoomId == notifyRoomId) ? true : false; });
+            printf("Game has started !\n");
+            /*
+            if(read(clientFd,buffer,255) < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;
+                break;
+            }
+            */
             strcpy(buffer,"\0");
+            }
         }
 
         if(strcmp(buffer,"3\n") == 0){
@@ -365,7 +494,6 @@ void setPlayerNickname(int clientFd){
         memset(buffer,0,sizeof(buffer));
         // TODO: deal with buffer overflow
         if (recv(clientFd,buffer,64,MSG_FASTOPEN) > 0){
-            printf("Message recieved: %s\nMessage size: %ld",buffer,strlen(buffer));
             // Swapping '\n' for a null character
 
             buffer[strlen(buffer)-1] = '\0';
@@ -504,3 +632,4 @@ void answearHandler(Question q){
         }).detach();   
     }
 }
+
