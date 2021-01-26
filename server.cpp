@@ -61,6 +61,8 @@ public:
     Player owner;
     int RoomId;
     int playerCount = 0;
+    int playerAnswearsCount = 0;
+    bool inGame = false;
     std::unordered_set<int> playersInRoom;
     
     Room(Player ownr){
@@ -82,6 +84,11 @@ public:
         playersInRoom.erase(playerID);
         playerCount --;
     }
+
+    void addAnswear(){
+        playerAnswearsCount++;
+    }
+
 };
 
 
@@ -137,11 +144,11 @@ bool validNickname(std::string nickname);
 void displayPlayers();
 
 // sends given questions to the players 
-void askQuestion(Question q,std::unordered_set<int> players);
+void askQuestion(Question q,std::unordered_set<int> players,int owner);
 
 void questionHandler(Question q,std::unordered_set<int> players);
 
-void answearHandler(Question q,std::unordered_set<int> players_set);
+void answearHandler(Question q,std::unordered_set<int> players_set,int owner);
 
 
 void handleLeave(int clientFd);
@@ -193,15 +200,6 @@ int main(int argc, char ** argv){
 
 /****************************/
 
-    /*
-    std::thread([testQuestion]{
-        std::mutex m;
-        std::unique_lock<std::mutex> ul(m);
-        onlinePlayersCv.wait(ul, [] { return (playersConnected >= 2) ? true : false; });
-        askQuestion(testQuestion);
-    }).detach();
-    */
-    
     
     while(true){
    
@@ -260,7 +258,6 @@ void ctrl_c(int){
     
     // TEST
     // Change condition variable so the question asking thread shuts down. 
-    playersConnected = 2;
     onlinePlayersCv.notify_one();
     controlQuestionsCv.notify_all();
     
@@ -360,19 +357,36 @@ void clientLoop(int clientFd, char * buffer){
                         notifyRoomId = r.RoomId;
                         startGameCv.notify_all();
                         notifyRoomMutex.unlock();
-                        askQuestion(testQuestion,gameRooms.find(clientFd*123)->second.playersInRoom);
-                        
-                        printf("Ending question asking thread client:%d\n",clientFd);
+                        gameRooms.find(clientFd*123)->second.inGame = true;
+                        askQuestion(testQuestion,gameRooms.find(clientFd*123)->second.playersInRoom,clientFd); 
+                        // TODO: Wait for all the players to answear 
+                        //printf("Waiting for the players to answear...\n");
+                        //printf("BEFORE:\n");
+                        std::mutex m4;
+                        std::unique_lock<std::mutex> ul4(m4);
+                        controlQuestionsCv.wait(ul4,[clientFd] {
+                             return ( gameRooms.find(123*clientFd)->second.playerAnswearsCount == gameRooms.find(123*clientFd)->second.playerCount) ? true : false;
+                            });
+                        //printf("AFTER:\n");
+                        //printf("PlayersAnswears:\n",);
+                        //printf("Ending question asking thread client:%d\n",clientFd);
                     }).join();
                     //notifyRoomId = r.RoomId;
-                    //endGameCv.notify_all();
+                    //
                     notifyRoomMutex.lock();
                     notifyFdMutex.lock();
                     notifyFd = 0;
                     notifyRoomId = 0;
+                    gameRooms.find(clientFd*123)->second.inGame = false;
                     startGameCv.notify_all();
                     notifyFdMutex.unlock();
                     notifyRoomMutex.unlock();
+                    endGameCv.notify_all();
+                    printf("Closing game room ...\n");
+                    
+                    //This is not a good solution 
+                    sleep(1);
+                    gameRooms.erase(r.RoomId);
                     strcpy(buffer,"\0");
                     continue;
                 }  
@@ -471,6 +485,15 @@ void clientLoop(int clientFd, char * buffer){
             printf("player %d has been notified\n",clientFd);
             if(players[clientFd].getWaiting() == false){
                 printf("Player has left the room\n");
+                char menuMsg[255] = "Player ";
+                strcat(menuMsg,players[clientFd].getNickname().c_str());
+                strcat(menuMsg," has left your room !\n");
+                if(send(currentRoom->owner.getPlayerID(), menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    perror("Send error (menu)");
+                    clientFds.erase(currentRoom->owner.getPlayerID());
+                    break;
+                }
                 currentRoom->removePlayer(clientFd);
                 notifyFdMutex.lock();
                 notifyFd = 0;
@@ -499,12 +522,11 @@ void clientLoop(int clientFd, char * buffer){
             //endGameCv.wait(lock2,[currentRoom] { return (currentRoom->RoomId == notifyRoomId) ? true : false; });
             printf("Ronud has ended!\n");
             controlQuestionsCv.wait(ul,[clientFd] { return (clientFd == notifyFd) ? true : false; });
-            currentRoom->removePlayer(clientFd);
-            currentRoom = NULL;
-            //std::mutex m3;
-            //std::unique_lock<std::mutex> ul2(m3);
-            //endGameCv.wait(ul2,[currentRoom] { return (currentRoom->RoomId == notifyRoomId) ? true : false; });
-            //printf("Game has ended!\n");
+            
+            std::mutex m3;
+            std::unique_lock<std::mutex> ul2(m3);
+            endGameCv.wait(ul2,[currentRoom] { return (currentRoom->inGame == false) ? true : false; });
+            printf("Game has ended!\n");
             strcpy(buffer,"\0");
             notifyFd = 0;
             }
@@ -611,10 +633,10 @@ void displayPlayers(){
 
 
 // Sends questions and possible answears then handles answears from clients
-void askQuestion(Question q,std::unordered_set<int> players){
-        //printf("askQuestion(0) started\n");
+void askQuestion(Question q,std::unordered_set<int> players,int owner){
+        gameRooms.find(123*owner)->second.playerAnswearsCount = 0;
         questionHandler(q,players);
-        answearHandler(q,players);
+        answearHandler(q,players,owner);
     }
 
 // Send question and possible answears to a group of players
@@ -651,9 +673,9 @@ void questionHandler(Question q,std::unordered_set<int> players){
 }
 
 // Collects answears from a group of players
-void answearHandler(Question q,std::unordered_set<int> players_set){
+void answearHandler(Question q,std::unordered_set<int> players_set,int owner){
     for(int clientFd : players_set){
-        std::thread([clientFd,q]{
+        std::thread([clientFd,q,owner]{
             //printf("Answear handler player %d",clientFd);
             char buff[32] = "\0";
             int count = read(clientFd,buff,32);
@@ -668,11 +690,14 @@ void answearHandler(Question q,std::unordered_set<int> players_set){
             buff[strlen(buff)-1] = '\0';
             //printf("The answear is: %s\n",q.correctAnswear.c_str());
             //printf("Player %s gave an answear (%s)\n",players[clientFd].getNickname().c_str(),buff);
-            if(strcmp(buff,q.correctAnswear.c_str()) == 0)
+            if(strcmp(buff,q.correctAnswear.c_str()) == 0){
                 printf("Player %s answeared correctly\n",players[clientFd].getNickname().c_str());
-            else
+            }
+            else{
                 printf("Player %s gave a wrong answear\n",players[clientFd].getNickname().c_str());
+            }
             printf("Question answearing thread ended for player %d\n",clientFd);
+            gameRooms.find(123*owner)->second.playerAnswearsCount++;
             notifyFd = clientFd;
             controlQuestionsCv.notify_all();
             
@@ -690,7 +715,7 @@ void handleLeave(int clientFd){
             notifyRoomId = 0;
             startGameCv.notify_all();
         }
-        printf("waiting...\n");
+        //printf("waiting...\n");
         sleep(1);
     }
 }
