@@ -31,11 +31,14 @@ public:
 class Quiz{
 public:
     std::vector<Question> questions;
-
-    void createQuiz(){
+    std::string quizTitle;
+    Quiz(){
 
     }
-
+    Quiz(std::vector<Question> question_set,std::string title){
+        questions = question_set;
+        quizTitle = title;
+    }
     void addQuestion(Question q){
         questions.push_back(q);
     }
@@ -148,10 +151,6 @@ std::vector<Quiz> quizSet;
 // handles SIGINT
 void ctrl_c(int);
 
-// sends data to clientFds excluding fd
-void sendToAllBut(int fd, char * buffer, int count);
-
-
 // handles interaction with the client
 void clientLoop(int clientFd, char * buffer);
 
@@ -175,10 +174,13 @@ void questionTimer(int seconds);
 
 void sendScoreBoard(std::unordered_set<int> playersInRoom); 
 
-const char* answearTimer(Question q,int clientFd);
+void createQuiz(int clientFd);
 
+void loadSampleQuizzes();
 
 void handleLeave(int clientFd);
+
+bool isNumeric(std::string str);
 
 // converts cstring to port
 uint16_t readPort(char * txt);
@@ -186,11 +188,7 @@ uint16_t readPort(char * txt);
 // sets SO_REUSEADDR
 void setReuseAddr(int sock);
 
-
-
 int main(int argc, char ** argv){
-
-
 
     // get and validate port number
     if(argc != 2) error(1, 0, "Need 1 arg (port)");
@@ -221,8 +219,8 @@ int main(int argc, char ** argv){
     res = listen(servFd, 1);
     if(res) error(1, errno, "listen failed");
 
-    
-
+    // load sample quizzes
+    loadSampleQuizzes();
     
 
 /****************************/
@@ -311,7 +309,7 @@ void clientLoop(int clientFd, char * buffer){
     setPlayerNickname(clientFd);
     
     while(true){
-        char menuMsg[] = "=== \"kahoot\" menu ===\n1.Create a room.\n2.Join a room\n3.Exit\n";
+        char menuMsg[] = "=== \"kahoot\" menu ===\n1.Host a game.\n2.Join a room\n3.Exit\n";
         if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
         std::unique_lock<std::mutex> lock(clientFdsLock);
         perror("Send error (menu)");
@@ -330,7 +328,7 @@ void clientLoop(int clientFd, char * buffer){
         }
 
         if(strcmp(buffer,"1\n") == 0){
-            char menuMsg[] = "=== \"kahoot\" menu ===\n1.Create a room.\n2.Choose a quiz set\n3.Go back\n";
+            char menuMsg[] = "=== \"kahoot\" menu ===\n1.Choose a quiz.\n2.Create a quiz set\n3.Go back\n";
             if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
                 std::unique_lock<std::mutex> lock(clientFdsLock);
                 perror("Send error (menu)");
@@ -347,8 +345,38 @@ void clientLoop(int clientFd, char * buffer){
             if(strcmp(buffer,"1\n") == 0){
                 // createRoom function
                 Room r(players[clientFd]);
-                gameRooms.insert(std::pair<int,Room>(r.RoomId,r));
-                char menuMsg[255] = "Successfully created a room. Room id:";
+                char menuMsg[4096] = "Choose quiz set:\n";
+                for (unsigned i=0; i<quizSet.size(); i++){
+                    strcat(menuMsg,std::to_string(i+1).c_str());
+                    strcat(menuMsg,". ");
+                    strcat(menuMsg,quizSet.at(i).quizTitle.c_str());
+                    strcat(menuMsg,"\n");
+                    }
+
+                memset(buffer,0,sizeof(buffer));
+                do{
+                    if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
+                        std::unique_lock<std::mutex> lock(clientFdsLock);
+                        perror("Send error (menu)");
+                        clientFds.erase(clientFd);
+                        break;
+                    }
+                    memset(buffer,0,sizeof(buffer));  
+                    if(read(clientFd,buffer,255) < 0){
+                        perror("Read error (menu)");
+                        std::unique_lock<std::mutex> lock(clientFdsLock);
+                        clientFds.erase(clientFd);
+                        playersConnected --;
+                        break;
+                    }
+                    printf("%d\n",atoi(buffer));
+                    printf("%d\n",(int)(quizSet.size()));
+                }while(atoi(buffer)-1 >= (int)(quizSet.size()) || atoi(buffer)-1 < 0);
+                printf("Quiz picked: %s",quizSet.at(atoi(buffer)-1).quizTitle.c_str());
+
+                r.quiz = quizSet.at(atoi(buffer)-1);   
+                //gameRooms.insert(std::pair<int,Room>(r.RoomId,r));
+                strcpy(menuMsg,"Successfully created a room. Room id:");
                 strcat(menuMsg,std::to_string(r.RoomId).c_str());
                 strcat(menuMsg,"\n1.Start the game\n2.Exit\n===Awaiting players===\n");
                 if(send(clientFd, menuMsg, strlen(menuMsg)+1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1){
@@ -356,8 +384,33 @@ void clientLoop(int clientFd, char * buffer){
                     perror("Send error (menu)");
                     clientFds.erase(clientFd);
                     break;
-            }
+                }
                 strcpy(buffer,"\0");
+                /*
+                // test question
+                Question testQuestion = Question();
+                testQuestion.questionText = "A is the correct answear.";
+                testQuestion.answearA = "Answear 1";
+                testQuestion.answearB = "Answear 2";
+                testQuestion.answearC = "Answear 3";
+                testQuestion.answearD = "Answear 4";
+                testQuestion.correctAnswear = "A";
+                testQuestion.answearTime = 10;
+
+                //test quiz
+                Quiz testQuiz = Quiz();
+                testQuiz.addQuestion(testQuestion);
+                testQuestion.answearTime = 12;
+                testQuiz.addQuestion(testQuestion);
+                testQuestion.answearTime = 11;
+                testQuiz.addQuestion(testQuestion);
+                testQuiz.addQuestion(testQuestion);
+                testQuiz.quizTitle = "Quiz title";
+
+                r.quiz = testQuiz;
+                */
+                gameRooms.insert(std::pair<int,Room>(r.RoomId,r));
+
                 if(read(clientFd,buffer,255) < 0){
                     perror("Read error (menu)");
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -365,32 +418,20 @@ void clientLoop(int clientFd, char * buffer){
                     playersConnected --;
                     break;
                 }
-                    // test question
-                    Question testQuestion = Question();
-                    testQuestion.questionText = "A is the correct answear.";
-                    testQuestion.answearA = "Answear 1";
-                    testQuestion.answearB = "Answear 2";
-                    testQuestion.answearC = "Answear 3";
-                    testQuestion.answearD = "Answear 4";
-                    testQuestion.correctAnswear = "A";
-                    testQuestion.answearTime = 10;
-
-                    //test quiz
-                    Quiz testQuiz = Quiz();
-                    testQuiz.addQuestion(testQuestion);
-                    testQuestion.answearTime = 12;
-                    testQuiz.addQuestion(testQuestion);
-                    testQuestion.answearTime = 11;
-                    testQuiz.addQuestion(testQuestion);
-                    testQuiz.addQuestion(testQuestion);
 
                 if(strcmp(buffer,"1\n") == 0){
-                    printf("Starting the game.\n");
+                    //printf("Starting the game.\n");
                     notifyFd = 0;
                     notifyRoomId = 0;
+
+                    // resets player score before the game
+                    for(int playerFd : gameRooms.find(clientFd*123)->second.playersInRoom){
+                        players[playerFd].setScore(0);
+                    }
+
+                    
                     //std::thread([testQuestion,clientFd,r]{
-                    for(Question q : testQuiz.questions){    
-                        printf("askQuestion client:%d\n",clientFd);
+                    for(Question q : r.quiz.questions){
                         notifyRoomMutex.lock();
                         notifyRoomId = r.RoomId;
                         startGameCv.notify_all();
@@ -415,9 +456,7 @@ void clientLoop(int clientFd, char * buffer){
 
                     // send score board to the players
                     sendScoreBoard(gameRooms.find(clientFd*123)->second.playersInRoom);
-                    //}).join();
-                    //notifyRoomId = r.RoomId;
-                    //
+
                     notifyRoomMutex.lock();
                     notifyFdMutex.lock();
                     notifyFd = 0;
@@ -448,12 +487,14 @@ void clientLoop(int clientFd, char * buffer){
                     continue;
                 }  
             }
+
             if(strcmp(buffer,"2\n") == 0){
-                std::cout << "mymap contains:\n";
-                for (std::map<int,Room>::iterator it=gameRooms.begin(); it!=gameRooms.end(); ++it){
-                    printf("Key: %d Value: %d\n",it->first,it->second.owner.getPlayerID());
-                    printf("Player count: %d\n",it->second.playerCount);
+                std::cout << "Quiz list:\n";
+                
+                for (std::vector<Quiz>::iterator it=quizSet.begin(); it!=quizSet.end(); ++it){
+                    printf("%s\n",it->quizTitle.c_str());
                 }
+                createQuiz(clientFd);
                 // browse through quizzes
                 strcpy(buffer,"\0");
                 continue;
@@ -511,6 +552,8 @@ void clientLoop(int clientFd, char * buffer){
             else{
             char menuMsg2[255] = "You have joined the room. Room id:";
             strcat(menuMsg2,std::to_string(currentRoom->RoomId).c_str());
+            strcat(menuMsg2,"\nQuiz category :");
+            strcat(menuMsg2,currentRoom->quiz.quizTitle.c_str());
             strcat(menuMsg2,"\nWaiting for the game to start.\n");
             if(send(clientFd, menuMsg2, strlen(menuMsg2)+1, MSG_DONTWAIT) != (int)strlen(menuMsg2) + 1){
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -772,7 +815,7 @@ void answearHandler(Question q,std::unordered_set<int> players_set,int ownerFd){
                             clientFds.erase(clientFd);
                             close(clientFd);
                         }
-                int score = 1000 +(1000*q.answearTime - ansTime.count())/100;
+                int score = 1000 +(1000*q.answearTime - ansTime.count())/50;
                 players[clientFd].addToScore(score);
                 printf("Player %s answeared correctly\n",players[clientFd].getNickname().c_str());
             }
@@ -819,19 +862,6 @@ void handleLeave(int clientFd){
     }
 }
 
-const char* answearTimer(Question q,int clientFd){
-    char buffer[255] ="\0";
-    char* result;
-    for(int i = 0; i < q.answearTime; i++){
-        if(recv(clientFd,buffer,255,MSG_DONTWAIT) > 0){
-            result = buffer;
-            break;
-        }
-        sleep(1);
-    }
-    return result;
-}
-
 void sendScoreBoard(std::unordered_set<int> playersInRoom){
     std::map<int,int> playerScores;
     char scoreBoardMsg[2048] = "Scoreboard:\n";
@@ -873,7 +903,229 @@ void sendScoreBoard(std::unordered_set<int> playersInRoom){
                 std::unique_lock<std::mutex> lock(clientFdsLock);
                 perror("send error (score board)");
                 clientFds.erase(clientFd);
-        }
+            }
         }
     }
 }   
+
+
+void createQuiz(int clientFd){
+        char createQuizMsg[] = "Enter quiz title: \n";
+        Quiz quiz;
+        
+        if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+        std::unique_lock<std::mutex> lock(clientFdsLock);
+        perror("Send error (menu)");
+        clientFds.erase(clientFd);
+        }
+        char buffer[4096];
+        memset(buffer,0,4096);
+        int count = read(clientFd,buffer,4096);
+        if(count < 0){
+            perror("Read error (menu)");
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            clientFds.erase(clientFd);
+            playersConnected --;
+        }
+        buffer[count-1] = '\0';
+        quiz.quizTitle = buffer;
+        //printf("%s\n",quiz.quizTitle.c_str());
+        int questionCount = 0;
+        
+        do{
+            Question newQuestion;
+            questionCount++;
+            char createQuizMsg[4096] = "Enter question text (question no. ";
+            strcat(createQuizMsg,std::to_string(questionCount).c_str());
+            strcat(createQuizMsg,")\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("Send error (menu)");
+            clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;         
+            }
+            buffer[count-1] = '\0';
+            newQuestion.questionText = buffer;
+
+            strcpy(createQuizMsg,"Enter answear A text:\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("Send error (menu)");
+            clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;         
+            }
+            buffer[count-1] = '\0';
+            newQuestion.answearA = buffer;
+
+            strcpy(createQuizMsg,"Enter answear B text:\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("Send error (menu)");
+            clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;         
+            }
+            buffer[count-1] = '\0';
+            newQuestion.answearB = buffer;
+
+            strcpy(createQuizMsg,"Enter answear C text:\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                perror("Send error (menu)");
+                clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;         
+            }
+            buffer[count-1] = '\0';
+            newQuestion.answearC = buffer;
+
+            strcpy(createQuizMsg,"Enter answear D text:\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("Send error (menu)");
+            clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                perror("Read error (menu)");
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                clientFds.erase(clientFd);
+                playersConnected --;         
+            }
+            buffer[count-1] = '\0';
+            newQuestion.answearD = buffer;
+
+            strcpy(createQuizMsg,"Which answear is correct? (A,B,C,D)\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                perror("Send error (menu)");
+                clientFds.erase(clientFd);
+            }
+            
+            do{
+                memset(buffer,0,4096);
+                count = read(clientFd,buffer,4096);
+                if(count < 0){
+                    perror("Read error (menu)");
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    clientFds.erase(clientFd);
+                    playersConnected --;         
+                } 
+            }while(strcmp(buffer,"A\n") != 0 && strcmp(buffer,"B\n") != 0 && strcmp(buffer,"C\n") != 0 && strcmp(buffer,"D\n") != 0);
+            buffer[count-1] = '\0';
+            newQuestion.correctAnswear = buffer;
+
+            // only 20 seconds per question. period.
+            newQuestion.answearTime = 20;
+            quiz.addQuestion(newQuestion);
+
+            do{
+            strcpy(createQuizMsg,"Create another question - type \"1\"\nFinish quiz - type \"2\"\n");
+            if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+                std::unique_lock<std::mutex> lock(clientFdsLock);
+                perror("Send error (menu)");
+                clientFds.erase(clientFd);
+            }
+            memset(buffer,0,4096);
+            count = read(clientFd,buffer,4096);
+            if(count < 0){
+                    perror("Read error (menu)");
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    clientFds.erase(clientFd);
+                    playersConnected --;         
+                }
+            }while(strcmp(buffer,"1\n") != 0 && strcmp(buffer,"2\n") != 0);
+        }while(strcmp(buffer,"2\n") != 0);
+        quizSet.push_back(quiz);
+
+        strcpy(createQuizMsg,"Quiz created!\n");
+        if(send(clientFd, createQuizMsg, strlen(createQuizMsg)+1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1){
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("Send error (menu)");
+            clientFds.erase(clientFd);
+        }      
+}
+
+void loadSampleQuizzes(){
+    Question sampleQuestion;
+    sampleQuestion.questionText = "A is the correct answear.";
+    sampleQuestion.answearA = "Answear 1";
+    sampleQuestion.answearB = "Answear 2";
+    sampleQuestion.answearC = "Answear 3";
+    sampleQuestion.answearD = "Answear 4";
+    sampleQuestion.correctAnswear = "A";
+    sampleQuestion.answearTime = 20;
+
+    Quiz sampleQuizA;
+    sampleQuizA.addQuestion(sampleQuestion);
+    sampleQuizA.addQuestion(sampleQuestion);
+    sampleQuizA.addQuestion(sampleQuestion);
+    sampleQuizA.addQuestion(sampleQuestion);
+    sampleQuizA.quizTitle = "Sample quiz A";
+
+    sampleQuestion.questionText = "B is the correct answear.";
+    sampleQuestion.answearA = "Answear 1";
+    sampleQuestion.answearB = "Answear 2";
+    sampleQuestion.answearC = "Answear 3";
+    sampleQuestion.answearD = "Answear 4";
+    sampleQuestion.correctAnswear = "B";
+    sampleQuestion.answearTime = 20;
+
+    Quiz sampleQuizB;
+    sampleQuizB.addQuestion(sampleQuestion);
+    sampleQuizB.addQuestion(sampleQuestion);
+    sampleQuizB.addQuestion(sampleQuestion);
+    sampleQuizB.quizTitle = "Sample quiz B";
+
+    sampleQuestion.questionText = "C is the correct answear.";
+    sampleQuestion.answearA = "Answear 1";
+    sampleQuestion.answearB = "Answear 2";
+    sampleQuestion.answearC = "Answear 3";
+    sampleQuestion.answearD = "Answear 4";
+    sampleQuestion.correctAnswear = "C";
+    sampleQuestion.answearTime = 20;
+
+    Quiz sampleQuizC;
+    sampleQuizC.addQuestion(sampleQuestion);
+    sampleQuizC.addQuestion(sampleQuestion);
+    sampleQuizC.quizTitle = "Sample quiz C";
+
+    quizSet.push_back(sampleQuizA);
+    quizSet.push_back(sampleQuizB);
+    quizSet.push_back(sampleQuizC);
+}
+
+bool isNumeric(std::string str) {
+   for (int i = 0; i < (int)(str.length()); i++){
+      if (isdigit(str[i]) == false)
+         return false;
+   }
+    return true;
+}
