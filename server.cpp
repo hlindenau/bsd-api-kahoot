@@ -358,14 +358,14 @@ void clientLoop(int clientFd)
                 clientFds.erase(clientFd);
                 break;
             }
-            if (read(clientFd, buffer, 255) < 0)
-            {
-                perror("Read error (menu)");
-                std::unique_lock<std::mutex> lock(clientFdsLock);
-                clientFds.erase(clientFd);
-                playersConnected--;
-                break;
-            }
+                if (read(clientFd, buffer, 255) < 0)
+                {
+                    perror("Read error (menu)");
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    clientFds.erase(clientFd);
+                    playersConnected--;
+                    break;
+                }
             if (strcmp(buffer, "1\n") == 0)
             {   
                 // creates a room
@@ -423,7 +423,7 @@ void clientLoop(int clientFd)
                 strcpy(buffer, "\0");
 
                 gameRooms.insert(std::pair<int, Room>(r.RoomId, r));
-
+                do{
                 if (read(clientFd, buffer, 255) < 0)
                 {
                     perror("Read error (menu)");
@@ -433,6 +433,7 @@ void clientLoop(int clientFd)
                     playersConnected--;
                     break;
                 }
+                }while(strcmp(buffer,"1\n")!=0 &&strcmp(buffer,"2\n")!=0);
                 
                 // starts the game
                 if (strcmp(buffer, "1\n") == 0)
@@ -542,6 +543,7 @@ void clientLoop(int clientFd)
                     continue;
                 }
             }
+            
 
             // quiz creation menu
             if (strcmp(buffer, "2\n") == 0)
@@ -616,6 +618,7 @@ void clientLoop(int clientFd)
             if (!roomExists)
             {
                 char menuMsg[] = "MM:Room does not exist.\n";
+                strcpy(buffer,"\0");
                 if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
                 {
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -944,7 +947,7 @@ void handleLeave(int clientFd)
 void sendScoreBoard(std::unordered_set<int> playersInRoom,int owner)
 {
     std::map<int, int> playerScores;
-    char scoreBoardMsg[2048] = "MP:Scoreboard:\n";
+    char scoreBoardMsg[2048] = "S:Scoreboard:\n";
 
     // sort player fd's by their score
     for (int clientFd : playersInRoom)
