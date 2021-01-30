@@ -19,6 +19,8 @@
 #include <chrono>
 using namespace std::chrono;
 
+#define MAXLENGTH 4096
+
 class Question
 {
 public:
@@ -336,9 +338,9 @@ void clientLoop(int clientFd)
             break;
         }
 
-        char buffer[255];
-        memset(buffer, 0, 255);
-        if (read(clientFd, buffer, 255) < 0)
+        char buffer[MAXLENGTH];
+        memset(buffer, 0, MAXLENGTH);
+        if (read(clientFd, buffer, MAXLENGTH) < 0)
         {
             perror("Read error (menu)");
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -358,7 +360,7 @@ void clientLoop(int clientFd)
                 clientFds.erase(clientFd);
                 break;
             }
-                if (read(clientFd, buffer, 255) < 0)
+                if (read(clientFd, buffer, MAXLENGTH) < 0)
                 {
                     perror("Read error (menu)");
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -394,7 +396,7 @@ void clientLoop(int clientFd)
                         break;
                     }
                     memset(buffer, 0, sizeof(buffer));
-                    if (read(clientFd, buffer, 255) < 0)
+                    if (read(clientFd, buffer, MAXLENGTH) < 0)
                     {
                         perror("Read error (menu)");
                         std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -424,7 +426,7 @@ void clientLoop(int clientFd)
 
                 gameRooms.insert(std::pair<int, Room>(r.RoomId, r));
                 do{
-                if (read(clientFd, buffer, 255) < 0)
+                if (read(clientFd, buffer, MAXLENGTH) < 0)
                 {
                     perror("Read error (menu)");
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -504,7 +506,7 @@ void clientLoop(int clientFd)
                     sleep(1);
                     gameRooms.erase(r.RoomId);
 
-                    if (read(clientFd, buffer, 255) < 0)
+                    if (read(clientFd, buffer, MAXLENGTH) < 0)
                     {
                         perror("Read error (menu)");
                         std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -582,7 +584,7 @@ void clientLoop(int clientFd)
                 clientFds.erase(clientFd);
                 break;
             }
-            if (read(clientFd, buffer, 255) < 0)
+            if (read(clientFd, buffer, MAXLENGTH) < 0)
             {
                 perror("Read error (menu)");
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -602,7 +604,7 @@ void clientLoop(int clientFd)
                     currentRoom = &it->second;
                     roomExists = true;
                     it->second.addPlayer(clientFd);
-                    char menuMsg[255] = "MH:Player ";
+                    char menuMsg[MAXLENGTH] = "MH:Player ";
                     strcat(menuMsg, players_map.find(clientFd)->second.getNickname().c_str());
                     strcat(menuMsg, " has joined your room !\n");
                     if (send(it->second.owner.getPlayerID(), menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
@@ -666,7 +668,7 @@ void clientLoop(int clientFd)
 
                     currentRoom->removePlayer(clientFd);
                     printf("MH:Player has left the room\n");
-                    char menuMsg[255] = "Player ";
+                    char menuMsg[MAXLENGTH] = "Player ";
                     strcat(menuMsg, players_map.find(clientFd)->second.getNickname().c_str());
                     strcat(menuMsg, " has left your room !\n");
                     sendLobbyInfo(*currentRoom);
@@ -698,7 +700,7 @@ void clientLoop(int clientFd)
                 printf("Game has ended for player %d!\n", clientFd);
 
                 // waits for player to finish watching scoreboard
-                if (read(clientFd, buffer, 255) < 0)
+                if (read(clientFd, buffer, MAXLENGTH) < 0)
                 {
                     perror("Read error (menu)");
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -733,13 +735,13 @@ void setPlayerNickname(int clientFd)
         perror("nickname setup message failed");
         clientFds.erase(clientFd);
     }
-    char buffer[64];
+    char buffer[MAXLENGTH];
     decltype(clientFds) bad;
     while (true)
     {
         memset(buffer, 0, sizeof(buffer));
         // TODO: deal with buffer overflow
-        if (read(clientFd, buffer, 64) > 0)
+        if (read(clientFd, buffer, MAXLENGTH) > 0)
         {
             // Swapping '\n' for a null character
             buffer[strlen(buffer) - 1] = '\0';
@@ -827,7 +829,7 @@ void questionHandler(Question q, std::unordered_set<int> players)
     for (int clientFd : players)
     {
         //printf("Question handler loop playerfd : %d\n",clientFd);
-        char msg[2048] = "Q:";
+        char msg[MAXLENGTH] = "Q:";
         strcat(msg, q.questionText.c_str());
         strcat(msg, "\nA: ");
         strcat(msg, q.answearA.c_str());
@@ -859,13 +861,13 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
     for (int clientFd : players_set)
     {
         std::thread([clientFd, q, ownerFd, start] {
-            char buff[32] = "\0";
+            char buff[MAXLENGTH] = "\0";
 
             auto stop = high_resolution_clock::now();
             auto duration = duration_cast<seconds>(stop - start);
             while (duration.count() < q.answearTime)
             {
-                if (recv(clientFd, buff, 255, MSG_DONTWAIT) > 0)
+                if (recv(clientFd, buff, MAXLENGTH, MSG_DONTWAIT) > 0)
                 {
                     break;
                 }
@@ -878,7 +880,7 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
             buff[strlen(buff) - 1] = '\0';
             if (strcmp(buff, q.correctAnswear.c_str()) == 0)
             {
-                char msg[2048] = "\0";
+                char msg[MAXLENGTH] = "\0";
                 strcat(msg, "MH:Player ");
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
                 strcat(msg, " has answeared correctly in ");
@@ -899,7 +901,7 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
             }
             else
             {
-                char msg[2048] = "MH:";
+                char msg[MAXLENGTH] = "MH:";
                 strcat(msg, "Player ");
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
                 strcat(msg, " gave a wrong answear( ");
@@ -925,10 +927,10 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
 
 void handleLeave(int clientFd)
 {
-    char buffer[255] = "";
+    char buffer[MAXLENGTH] = "";
     while (players_map.find(clientFd)->second.getWaiting())
     {
-        recv(clientFd, buffer, 255, MSG_DONTWAIT);
+        recv(clientFd, buffer, MAXLENGTH, MSG_DONTWAIT);
         if (strcmp(buffer, "3\n") == 0)
         {
             players_map.find(clientFd)->second.setWaiting(false);
@@ -947,7 +949,7 @@ void handleLeave(int clientFd)
 void sendScoreBoard(std::unordered_set<int> playersInRoom,int owner)
 {
     std::map<int, int> playerScores;
-    char scoreBoardMsg[2048] = "S:Scoreboard:\n";
+    char scoreBoardMsg[MAXLENGTH] = "S:Scoreboard:\n";
 
     // sort player fd's by their score
     for (int clientFd : playersInRoom)
@@ -988,7 +990,7 @@ void sendScoreBoard(std::unordered_set<int> playersInRoom,int owner)
         }
         if (players_map.find(clientFd)->second.getScore() < lastScore)
         {
-            char yourScoreMsg[2048] = "MH:Your score: ";
+            char yourScoreMsg[MAXLENGTH] = "MH:Your score: ";
             strcat(yourScoreMsg, std::to_string(players_map.find(clientFd)->second.getScore()).c_str());
             strcat(yourScoreMsg, " points\n");
 
@@ -1013,9 +1015,9 @@ void createQuiz(int clientFd)
         perror("Send error (menu)");
         clientFds.erase(clientFd);
     }
-    char buffer[4096];
-    memset(buffer, 0, 4096);
-    int count = read(clientFd, buffer, 4096);
+    char buffer[MAXLENGTH];
+    memset(buffer, 0, MAXLENGTH);
+    int count = read(clientFd, buffer, MAXLENGTH);
     if (count < 0)
     {
         perror("Read error (menu)");
@@ -1032,7 +1034,7 @@ void createQuiz(int clientFd)
     {
         Question newQuestion;
         questionCount++;
-        char createQuizMsg[4096] = "MH:Enter question text (question no. ";
+        char createQuizMsg[MAXLENGTH] = "MH:Enter question text (question no. ";
         strcat(createQuizMsg, std::to_string(questionCount).c_str());
         strcat(createQuizMsg, ")\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
@@ -1238,7 +1240,7 @@ void loadSampleQuizzes()
 }
 
 void sendLobbyInfo(Room room){
-    char menuMsg2[255] = "MP:You have joined the room. Room id:";
+    char menuMsg2[MAXLENGTH] = "MP:You have joined the room. Room id:";
                 strcat(menuMsg2, std::to_string(room.RoomId).c_str());
                 strcat(menuMsg2, "\nQuiz title :");
                 strcat(menuMsg2,room.quiz.quizTitle.c_str());
