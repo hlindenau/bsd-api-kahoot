@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MyWidget</class>
+ <widget class="QWidget" name="MyWidget">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>455</width>
+    <height>433</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Simple TCP client</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QStackedWidget" name="stackedWidget">
+     <property name="currentIndex">
+      <number>4</number>
+     </property>
+     <widget class="QWidget" name="page">
+      <widget class="QGroupBox" name="connectGroup">
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>10</y>
+         <width>437</width>
+         <height>64</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <layout class="QHBoxLayout" name="horizontalLayout">
+        <item>
+         <widget class="QLineEdit" name="hostLineEdit">
+          <property name="text">
+           <string>localhost</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QSpinBox" name="portSpinBox">
+          <property name="buttonSymbols">
+           <enum>QAbstractSpinBox::PlusMinus</enum>
+          </property>
+          <property name="minimum">
+           <number>1</number>
+          </property>
+          <property name="maximum">
+           <number>65535</number>
+          </property>
+          <property name="value">
+           <number>2000</number>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="conectBtn">
+          <property name="text">
+           <string>connect</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QGroupBox" name="talkGroup">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>0</x>
+         <y>90</y>
+         <width>437</width>
+         <height>262</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <layout class="QGridLayout" name="gridLayout">
+        <item row="1" column="0">
+         <widget class="QLineEdit" name="msgLineEdit"/>
+        </item>
+        <item row="0" column="0" colspan="2">
+         <widget class="QTextEdit" name="msgsTextEdit">
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QPushButton" name="sendBtn">
+          <property name="text">
+           <string>send</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_2">
+      <widget class="QGroupBox" name="groupBox">
+       <property name="geometry">
+        <rect>
+         <x>70</x>
+         <y>30</y>
+         <width>311</width>
+         <height>361</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <widget class="QLineEdit" name="lineEditMM">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>260</y>
+          <width>261</width>
+          <height>41</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QTextEdit" name="textEditMM">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>20</y>
+          <width>261</width>
+          <height>221</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonMM">
+        <property name="geometry">
+         <rect>
+          <x>110</x>
+          <y>320</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>ENTER</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QLineEdit" name="lineEditMMHead">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>130</x>
+         <y>10</y>
+         <width>181</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="readOnly">
+        <bool>false</bool>
+       </property>
+       <property name="placeholderText">
+        <string>Main Menu</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_3">
+      <widget class="QGroupBox" name="groupBox_2">
+       <property name="geometry">
+        <rect>
+         <x>70</x>
+         <y>30</y>
+         <width>311</width>
+         <height>361</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <widget class="QLineEdit" name="lineEditMH">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>260</y>
+          <width>261</width>
+          <height>41</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QTextEdit" name="textEditMH">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>20</y>
+          <width>261</width>
+          <height>221</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonMH">
+        <property name="geometry">
+         <rect>
+          <x>110</x>
+          <y>320</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>ENTER</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QLineEdit" name="lineEditMHHead">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>130</x>
+         <y>10</y>
+         <width>181</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="readOnly">
+        <bool>false</bool>
+       </property>
+       <property name="placeholderText">
+        <string>Host Menu</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_4">
+      <widget class="QGroupBox" name="groupBox_3">
+       <property name="geometry">
+        <rect>
+         <x>70</x>
+         <y>30</y>
+         <width>311</width>
+         <height>361</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <widget class="QLineEdit" name="lineEditMP">
+        <property name="enabled">
+         <bool>true</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>260</y>
+          <width>261</width>
+          <height>41</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QTextEdit" name="textEditMP">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>20</y>
+          <width>261</width>
+          <height>221</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonMP">
+        <property name="geometry">
+         <rect>
+          <x>110</x>
+          <y>320</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>ENTER</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QLineEdit" name="lineEditMPHead">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>130</x>
+         <y>10</y>
+         <width>181</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="readOnly">
+        <bool>false</bool>
+       </property>
+       <property name="placeholderText">
+        <string>Player Menu</string>
+       </property>
+      </widget>
+     </widget>
+     <widget class="QWidget" name="page_5">
+      <widget class="QGroupBox" name="groupBox_4">
+       <property name="geometry">
+        <rect>
+         <x>70</x>
+         <y>30</y>
+         <width>311</width>
+         <height>361</height>
+        </rect>
+       </property>
+       <property name="title">
+        <string/>
+       </property>
+       <widget class="QTextEdit" name="textEditQ">
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+        <property name="geometry">
+         <rect>
+          <x>20</x>
+          <y>20</y>
+          <width>261</width>
+          <height>221</height>
+         </rect>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonQA">
+        <property name="geometry">
+         <rect>
+          <x>40</x>
+          <y>260</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>A</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonQB">
+        <property name="geometry">
+         <rect>
+          <x>170</x>
+          <y>260</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>B</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonQC">
+        <property name="geometry">
+         <rect>
+          <x>40</x>
+          <y>310</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>C</string>
+        </property>
+       </widget>
+       <widget class="QPushButton" name="pushButtonQD">
+        <property name="geometry">
+         <rect>
+          <x>170</x>
+          <y>310</y>
+          <width>90</width>
+          <height>28</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>D</string>
+        </property>
+       </widget>
+      </widget>
+      <widget class="QLineEdit" name="lineEditQHead">
+       <property name="enabled">
+        <bool>false</bool>
+       </property>
+       <property name="geometry">
+        <rect>
+         <x>130</x>
+         <y>10</y>
+         <width>181</width>
+         <height>28</height>
+        </rect>
+       </property>
+       <property name="font">
+        <font>
+         <pointsize>12</pointsize>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="autoFillBackground">
+        <bool>false</bool>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+       <property name="readOnly">
+        <bool>false</bool>
+       </property>
+       <property name="placeholderText">
+        <string>Question</string>
+       </property>
+      </widget>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <layoutdefault spacing="6" margin="11"/>
+ <tabstops>
+  <tabstop>portSpinBox</tabstop>
+  <tabstop>hostLineEdit</tabstop>
+  <tabstop>conectBtn</tabstop>
+  <tabstop>msgLineEdit</tabstop>
+  <tabstop>sendBtn</tabstop>
+  <tabstop>msgsTextEdit</tabstop>
+ </tabstops>
+ <resources/>
+ <connections/>
+</ui>

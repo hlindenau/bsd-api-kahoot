@@ -285,6 +285,9 @@ void setReuseAddr(int sock)
     int res = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
     if (res)
         error(1, errno, "setsockopt failed");
+    //int res = setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &one, sizeof(one));
+    //if (res)
+    //    error(1, errno, "setsockopt failed");
 }
 
 void ctrl_c(int)
@@ -322,7 +325,7 @@ void clientLoop(int clientFd)
     // Client menu
     while (true)
     {
-        char menuMsg[] = "=== kahoot menu ===\n1.Host a game.\n2.Join a room\n3.Exit\n";
+        char menuMsg[] = "MM:=== kahoot menu ===\n1.Host a game.\n2.Join a room\n3.Exit\n";
         if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -345,7 +348,7 @@ void clientLoop(int clientFd)
         // Host menu
         if (strcmp(buffer, "1\n") == 0)
         {
-            char menuMsg[] = "=== kahoot menu ===\n1.Choose a quiz.\n2.Create a quiz set\n3.Go back\n";
+            char menuMsg[] = "MH:=== kahoot menu ===\n1.Choose a quiz.\n2.Create a quiz set\n3.Go back\n";
             if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
             {
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -367,7 +370,7 @@ void clientLoop(int clientFd)
                 Room r(players_map.find(clientFd)->second);
 
                 // sends a list of available quizzes
-                char menuMsg[4096] = "Choose quiz set number:\n";
+                char menuMsg[4096] = "MH:Choose quiz set number:\n";
                 for (unsigned i = 0; i < quizSet.size(); i++)
                 {
                     strcat(menuMsg, std::to_string(i + 1).c_str());
@@ -402,7 +405,7 @@ void clientLoop(int clientFd)
 
 
                 r.quiz = quizSet.at(atoi(buffer) - 1);
-                strcpy(menuMsg, "Quiz picked:");
+                strcpy(menuMsg, "MH:Quiz picked:");
                 strcat(menuMsg, r.quiz.quizTitle.c_str());
                 strcat(menuMsg, "\n");
                 strcat(menuMsg, "Successfully created a room. Room id:");
@@ -487,7 +490,7 @@ void clientLoop(int clientFd)
                 // close the game room
                 if (strcmp(buffer, "2\n") == 0)
                 {
-                    printf("Closing game room ...\n");
+                    printf("MH:Closing game room ...\n");
                     notifyRoomId = r.RoomId;
                     gameRooms.find(clientFd * 123)->second.inGame = false;
                     startGameCv.notify_all();
@@ -519,7 +522,7 @@ void clientLoop(int clientFd)
         // player menu
         if (strcmp(buffer, "2\n") == 0)
         {
-            char menuMsg[] = "=== \"kahoot\" menu ===\nPass in lobby id (type 3 to exit):";
+            char menuMsg[] = "MP:=== \"kahoot\" menu ===\nPass in lobby id (type 3 to exit):";
             if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
             {
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -547,7 +550,7 @@ void clientLoop(int clientFd)
                     currentRoom = &it->second;
                     roomExists = true;
                     it->second.addPlayer(clientFd);
-                    char menuMsg[255] = "Player ";
+                    char menuMsg[255] = "MH:Player ";
                     strcat(menuMsg, players_map.find(clientFd)->second.getNickname().c_str());
                     strcat(menuMsg, " has joined your room !\n");
                     if (send(it->second.owner.getPlayerID(), menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
@@ -562,7 +565,7 @@ void clientLoop(int clientFd)
             }
             if (!roomExists)
             {
-                char menuMsg[] = "Room does not exist.\n";
+                char menuMsg[] = "M:Room does not exist.\n";
                 if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
                 {
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -575,7 +578,7 @@ void clientLoop(int clientFd)
             // successfully joined a room
             else
             {
-                char menuMsg2[255] = "You have joined the room. Room id:";
+                char menuMsg2[255] = "MP:You have joined the room. Room id:";
                 strcat(menuMsg2, std::to_string(currentRoom->RoomId).c_str());
                 strcat(menuMsg2, "\nQuiz category :");
                 strcat(menuMsg2, currentRoom->quiz.quizTitle.c_str());
@@ -599,7 +602,7 @@ void clientLoop(int clientFd)
                 // takes player back to main menu if they decide to leave
                 if (players_map.find(clientFd)->second.getWaiting() == false)
                 {
-                    printf("Player has left the room\n");
+                    printf("MH:Player has left the room\n");
                     char menuMsg[255] = "Player ";
                     strcat(menuMsg, players_map.find(clientFd)->second.getNickname().c_str());
                     strcat(menuMsg, " has left your room !\n");
@@ -654,7 +657,7 @@ void setPlayerNickname(int clientFd)
     if (send(clientFd, msg1, strlen(msg1) + 1, MSG_DONTWAIT) != (int)strlen(msg1) + 1)
     {
         std::unique_lock<std::mutex> lock(clientFdsLock);
-        perror("Choose your nickname setup message failed");
+        perror("nickname setup message failed");
         clientFds.erase(clientFd);
     }
     char buffer[64];
@@ -751,7 +754,7 @@ void questionHandler(Question q, std::unordered_set<int> players)
     for (int clientFd : players)
     {
         //printf("Question handler loop playerfd : %d\n",clientFd);
-        char msg[2048] = "\0";
+        char msg[2048] = "Q:";
         strcat(msg, q.questionText.c_str());
         strcat(msg, "\nA: ");
         strcat(msg, q.answearA.c_str());
@@ -803,26 +806,27 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
             if (strcmp(buff, q.correctAnswear.c_str()) == 0)
             {
                 char msg[2048] = "\0";
-                strcat(msg, "Player ");
+                strcat(msg, "MH:Player ");
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
                 strcat(msg, " has answeared correctly in ");
                 strcat(msg, std::to_string(ansTime.count()).c_str());
-                strcat(msg, " seconds\n");
+                strcat(msg, " microseconds\n");
                 int count = strlen(msg);
                 int res = send(ownerFd, msg, count, MSG_DONTWAIT);
                 if (res != count)
                 {
                     printf("removing %d\n", clientFd);
                     clientFds.erase(clientFd);
+                    players_map.erase(clientFd);
                     close(clientFd);
                 }
                 int score = 1000 + (1000 * q.answearTime - ansTime.count()) / 50;
                 players_map.find(clientFd)->second.addToScore(score);
-                printf("Player %s answeared correctly\n", players_map.find(clientFd)->second.getNickname().c_str());
+                printf("MH:Player %s answeared correctly\n", players_map.find(clientFd)->second.getNickname().c_str());
             }
             else
             {
-                char msg[2048] = "\0";
+                char msg[2048] = "MH:";
                 strcat(msg, "Player ");
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
                 strcat(msg, " gave a wrong answear\n");
@@ -869,7 +873,7 @@ void handleLeave(int clientFd)
 void sendScoreBoard(std::unordered_set<int> playersInRoom)
 {
     std::map<int, int> playerScores;
-    char scoreBoardMsg[2048] = "Scoreboard:\n";
+    char scoreBoardMsg[2048] = "MP:Scoreboard:\n";
 
     // sort player fd's by their score
     for (int clientFd : playersInRoom)
@@ -905,7 +909,7 @@ void sendScoreBoard(std::unordered_set<int> playersInRoom)
         }
         if (players_map.find(clientFd)->second.getScore() < lastScore)
         {
-            char yourScoreMsg[2048] = "Your score: ";
+            char yourScoreMsg[2048] = "MH:Your score: ";
             strcat(yourScoreMsg, std::to_string(players_map.find(clientFd)->second.getScore()).c_str());
             strcat(yourScoreMsg, " points\n");
 
@@ -921,7 +925,7 @@ void sendScoreBoard(std::unordered_set<int> playersInRoom)
 
 void createQuiz(int clientFd)
 {
-    char createQuizMsg[] = "Enter quiz title: \n";
+    char createQuizMsg[] = "MH:Enter quiz title: \n";
     Quiz quiz;
 
     if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
@@ -949,7 +953,7 @@ void createQuiz(int clientFd)
     {
         Question newQuestion;
         questionCount++;
-        char createQuizMsg[4096] = "Enter question text (question no. ";
+        char createQuizMsg[4096] = "MH:Enter question text (question no. ";
         strcat(createQuizMsg, std::to_string(questionCount).c_str());
         strcat(createQuizMsg, ")\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
@@ -970,7 +974,7 @@ void createQuiz(int clientFd)
         buffer[count - 1] = '\0';
         newQuestion.questionText = buffer;
 
-        strcpy(createQuizMsg, "Enter answear A text:\n");
+        strcpy(createQuizMsg, "MH:Enter answear A text:\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -989,7 +993,7 @@ void createQuiz(int clientFd)
         buffer[count - 1] = '\0';
         newQuestion.answearA = buffer;
 
-        strcpy(createQuizMsg, "Enter answear B text:\n");
+        strcpy(createQuizMsg, "MH:Enter answear B text:\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -1008,7 +1012,7 @@ void createQuiz(int clientFd)
         buffer[count - 1] = '\0';
         newQuestion.answearB = buffer;
 
-        strcpy(createQuizMsg, "Enter answear C text:\n");
+        strcpy(createQuizMsg, "MH:Enter answear C text:\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -1027,7 +1031,7 @@ void createQuiz(int clientFd)
         buffer[count - 1] = '\0';
         newQuestion.answearC = buffer;
 
-        strcpy(createQuizMsg, "Enter answear D text:\n");
+        strcpy(createQuizMsg, "MH:Enter answear D text:\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -1046,7 +1050,7 @@ void createQuiz(int clientFd)
         buffer[count - 1] = '\0';
         newQuestion.answearD = buffer;
 
-        strcpy(createQuizMsg, "Which answear is correct? (A,B,C,D)\n");
+        strcpy(createQuizMsg, "MH:Which answear is correct? (A,B,C,D)\n");
         if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
         {
             std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -1075,7 +1079,7 @@ void createQuiz(int clientFd)
 
         do
         {
-            strcpy(createQuizMsg, "Create another question - type \"1\"\nFinish quiz - type \"2\"\n");
+            strcpy(createQuizMsg, "MH:Create another question - type \"1\"\nFinish quiz - type \"2\"\n");
             if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
             {
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -1095,7 +1099,7 @@ void createQuiz(int clientFd)
     } while (strcmp(buffer, "2\n") != 0);
     quizSet.push_back(quiz);
 
-    strcpy(createQuizMsg, "Quiz created!\n");
+    strcpy(createQuizMsg, "MH:Quiz created!\n");
     if (send(clientFd, createQuizMsg, strlen(createQuizMsg) + 1, MSG_DONTWAIT) != (int)strlen(createQuizMsg) + 1)
     {
         std::unique_lock<std::mutex> lock(clientFdsLock);
