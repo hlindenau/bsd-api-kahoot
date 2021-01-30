@@ -891,7 +891,7 @@ void handleLeave(int clientFd)
 void sendScoreBoard(std::unordered_set<int> playersInRoom)
 {
     std::map<int, int> playerScores;
-    char scoreBoardMsg[2048] = "MP:Scoreboard:\n";
+    char scoreBoardMsg[2048] = "S:Scoreboard:\n";
 
     // sort player fd's by their score
     for (int clientFd : playersInRoom)
