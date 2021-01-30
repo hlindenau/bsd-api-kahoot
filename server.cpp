@@ -522,7 +522,16 @@ void clientLoop(int clientFd)
         // player menu
         if (strcmp(buffer, "2\n") == 0)
         {
-            char menuMsg[] = "MP:=== \"kahoot\" menu ===\nPass in lobby id (type 3 to exit):";
+            char menuMsg[] = "MP:=== \"kahoot\" menu ===\nOpen lobbies:\n";
+            if(gameRooms.size() == 0){
+                strcat(menuMsg,"\n");
+            }
+            for (std::map<int, Room>::iterator it = gameRooms.begin(); it != gameRooms.end(); ++it)
+            {
+                strcat(menuMsg,std::to_string(it->second.RoomId).c_str());
+                strcat(menuMsg,"\n");
+            }
+            strcat(menuMsg,"Pass in lobby id:");
             if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
             {
                 std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -632,11 +641,20 @@ void clientLoop(int clientFd)
                 std::unique_lock<std::mutex> ul2(m3);
                 endGameCv.wait(ul2, [currentRoom] { return (currentRoom->inGame == false) ? true : false; });
                 printf("Game has ended for player %d!\n", clientFd);
+
+                // waits for player to finish watching scoreboard
+                if (read(clientFd, buffer, 255) < 0)
+                {
+                    perror("Read error (menu)");
+                    std::unique_lock<std::mutex> lock(clientFdsLock);
+                    clientFds.erase(clientFd);
+                    playersConnected--;
+                    break;
+                }
                 strcpy(buffer, "\0");
                 notifyFd = 0;
             }
         }
-
         // leave player menu
         if (strcmp(buffer, "3\n") == 0)
         {
@@ -810,7 +828,7 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
                 strcat(msg, " has answeared correctly in ");
                 strcat(msg, std::to_string(ansTime.count()).c_str());
-                strcat(msg, " microseconds\n");
+                strcat(msg, " miliseconds\n");
                 int count = strlen(msg);
                 int res = send(ownerFd, msg, count, MSG_DONTWAIT);
                 if (res != count)
