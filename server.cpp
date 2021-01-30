@@ -177,7 +177,7 @@ void questionHandler(Question q, std::unordered_set<int> players);
 void answearHandler(Question q, std::unordered_set<int> players_set, int owner);
 
 // send score board to the players (top 3 players and an individual score if the player is not in the top 3)
-void sendScoreBoard(std::unordered_set<int> playersInRoom);
+void sendScoreBoard(std::unordered_set<int> playersInRoom,int owner);
 
 // quiz creation for the host
 void createQuiz(int clientFd);
@@ -193,6 +193,8 @@ uint16_t readPort(char *txt);
 
 // sets SO_REUSEADDR
 void setReuseAddr(int sock);
+
+void sendLobbyInfo(Room room);
 
 int main(int argc, char **argv)
 {
@@ -448,6 +450,15 @@ void clientLoop(int clientFd)
                     // sends quiz questions to all players in the room
                     for (Question q : r.quiz.questions)
                     {
+                        // sends signal to the host
+                        strcpy(menuMsg, "MH:Round started!\n");
+                        if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
+                        {
+                            std::unique_lock<std::mutex> lock(clientFdsLock);
+                            perror("Send error (menu)");
+                            clientFds.erase(clientFd);
+                            break;
+                        }
                         notifyRoomMutex.lock();
                         notifyRoomId = r.RoomId;
                         startGameCv.notify_all();
@@ -461,18 +472,27 @@ void clientLoop(int clientFd)
                         controlQuestionsCv.wait(ul4, [clientFd] {
                             return (gameRooms.find(123 * clientFd)->second.playerAnswearsCount == gameRooms.find(123 * clientFd)->second.playerCount || notifyFd == -1) ? true : false;
                         });
+
+                        // sends signal to the host
+                        strcpy(menuMsg, "MH:Round finished!\n");
+                        if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
+                        {
+                            std::unique_lock<std::mutex> lock(clientFdsLock);
+                            perror("Send error (menu)");
+                            clientFds.erase(clientFd);
+                            break;
+                        }
                     }
 
                     // sends score boards 
-                    sendScoreBoard(gameRooms.find(clientFd * 123)->second.playersInRoom);
+                    sendScoreBoard(gameRooms.find(clientFd * 123)->second.playersInRoom,clientFd);
 
                     // resets notify variables
                     notifyRoomMutex.lock();
                     notifyFdMutex.lock();
                     notifyFd = 0;
                     notifyRoomId = 0;
-                    gameRooms.find(clientFd * 123)->second.playersInRoom,
-                        gameRooms.find(clientFd * 123)->second.inGame = false;
+                    gameRooms.find(clientFd * 123)->second.inGame = false;
                     startGameCv.notify_all();
                     notifyFdMutex.unlock();
                     notifyRoomMutex.unlock();
@@ -481,8 +501,17 @@ void clientLoop(int clientFd)
 
                     // Stops for a second so players leave the room before its erased (this is not perfect)
                     sleep(1);
-
                     gameRooms.erase(r.RoomId);
+
+                    if (read(clientFd, buffer, 255) < 0)
+                    {
+                        perror("Read error (menu)");
+                        std::unique_lock<std::mutex> lock(clientFdsLock);
+                        clientFds.erase(clientFd);
+                        gameRooms.erase(r.RoomId);
+                        playersConnected--;
+                        break;
+                    }
                     strcpy(buffer, "\0");
                     continue;
                 }
@@ -491,9 +520,21 @@ void clientLoop(int clientFd)
                 if (strcmp(buffer, "2\n") == 0)
                 {
                     printf("MH:Closing game room ...\n");
+                
                     notifyRoomId = r.RoomId;
                     gameRooms.find(clientFd * 123)->second.inGame = false;
                     startGameCv.notify_all();
+                    endGameCv.notify_all();
+
+                    sleep(1);
+                    notifyRoomMutex.lock();
+                    notifyFdMutex.lock();
+                    notifyFd = 0;
+                    notifyRoomId = 0;
+                    gameRooms.find(clientFd * 123)->second.inGame = false;
+                    startGameCv.notify_all();
+                    notifyFdMutex.unlock();
+                    notifyRoomMutex.unlock();
                     endGameCv.notify_all();
 
                     gameRooms.erase(r.RoomId);
@@ -574,7 +615,7 @@ void clientLoop(int clientFd)
             }
             if (!roomExists)
             {
-                char menuMsg[] = "M:Room does not exist.\n";
+                char menuMsg[] = "MM:Room does not exist.\n";
                 if (send(clientFd, menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
                 {
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -587,11 +628,18 @@ void clientLoop(int clientFd)
             // successfully joined a room
             else
             {
+                sendLobbyInfo(*currentRoom);
+                /*
                 char menuMsg2[255] = "MP:You have joined the room. Room id:";
                 strcat(menuMsg2, std::to_string(currentRoom->RoomId).c_str());
-                strcat(menuMsg2, "\nQuiz category :");
+                strcat(menuMsg2, "\nQuiz title :");
                 strcat(menuMsg2, currentRoom->quiz.quizTitle.c_str());
                 strcat(menuMsg2, "\nWaiting for the game to start. Type 3 to go back.\n");
+                strcat(menuMsg2, "Players in room:\n");
+                for(int p : currentRoom->playersInRoom){
+                    strcat(menuMsg,players_map.find(p)->second.getNickname().c_str());
+                    strcat(menuMsg2, "\n");
+                }
                 if (send(clientFd, menuMsg2, strlen(menuMsg2) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg2) + 1)
                 {
                     std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -599,6 +647,7 @@ void clientLoop(int clientFd)
                     clientFds.erase(clientFd);
                     break;
                 }
+                */
                 players_map.find(clientFd)->second.setWaiting(true);
 
                 std::thread leave(handleLeave, clientFd);
@@ -611,10 +660,13 @@ void clientLoop(int clientFd)
                 // takes player back to main menu if they decide to leave
                 if (players_map.find(clientFd)->second.getWaiting() == false)
                 {
+
+                    currentRoom->removePlayer(clientFd);
                     printf("MH:Player has left the room\n");
                     char menuMsg[255] = "Player ";
                     strcat(menuMsg, players_map.find(clientFd)->second.getNickname().c_str());
                     strcat(menuMsg, " has left your room !\n");
+                    sendLobbyInfo(*currentRoom);
                     if (send(currentRoom->owner.getPlayerID(), menuMsg, strlen(menuMsg) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg) + 1)
                     {
                         std::unique_lock<std::mutex> lock(clientFdsLock);
@@ -622,7 +674,7 @@ void clientLoop(int clientFd)
                         clientFds.erase(currentRoom->owner.getPlayerID());
                         break;
                     }
-                    currentRoom->removePlayer(clientFd);
+
                     notifyFdMutex.lock();
                     notifyFd = 0;
                     notifyRoomId = 0;
@@ -847,8 +899,9 @@ void answearHandler(Question q, std::unordered_set<int> players_set, int ownerFd
                 char msg[2048] = "MH:";
                 strcat(msg, "Player ");
                 strcat(msg, players_map.find(clientFd)->second.getNickname().c_str());
-                strcat(msg, " gave a wrong answear\n");
-
+                strcat(msg, " gave a wrong answear( ");
+                strcat(msg,buff);
+                strcat(msg, ")\n");
                 int count = strlen(msg);
                 int res = send(ownerFd, msg, count, MSG_DONTWAIT);
                 if (res != count)
@@ -888,10 +941,10 @@ void handleLeave(int clientFd)
     }
 }
 
-void sendScoreBoard(std::unordered_set<int> playersInRoom)
+void sendScoreBoard(std::unordered_set<int> playersInRoom,int owner)
 {
     std::map<int, int> playerScores;
-    char scoreBoardMsg[2048] = "S:Scoreboard:\n";
+    char scoreBoardMsg[2048] = "MP:Scoreboard:\n";
 
     // sort player fd's by their score
     for (int clientFd : playersInRoom)
@@ -915,7 +968,12 @@ void sendScoreBoard(std::unordered_set<int> playersInRoom)
         if (count > 3)
             break;
     }
-
+    if (send(owner, scoreBoardMsg, strlen(scoreBoardMsg) + 1, MSG_DONTWAIT) != (int)strlen(scoreBoardMsg) + 1)
+        {
+            std::unique_lock<std::mutex> lock(clientFdsLock);
+            perror("send error (score board)");
+            clientFds.erase(owner);
+        }
     for (int clientFd : playersInRoom)
     {
 
@@ -1174,4 +1232,26 @@ void loadSampleQuizzes()
     quizSet.push_back(sampleQuizA);
     quizSet.push_back(sampleQuizB);
     quizSet.push_back(sampleQuizC);
+}
+
+void sendLobbyInfo(Room room){
+    char menuMsg2[255] = "MP:You have joined the room. Room id:";
+                strcat(menuMsg2, std::to_string(room.RoomId).c_str());
+                strcat(menuMsg2, "\nQuiz title :");
+                strcat(menuMsg2,room.quiz.quizTitle.c_str());
+                strcat(menuMsg2, "\nWaiting for the game to start. Type 3 to go back.\n");
+                strcat(menuMsg2, "Players in room:\n");
+                for(int p : room.playersInRoom){
+                    strcat(menuMsg2,players_map.find(p)->second.getNickname().c_str());
+                    strcat(menuMsg2, "\n");
+                }
+                for(int p : room.playersInRoom){
+                    if (send(players_map.find(p)->second.getPlayerID(), menuMsg2, strlen(menuMsg2) + 1, MSG_DONTWAIT) != (int)strlen(menuMsg2) + 1)
+                    {
+                        std::unique_lock<std::mutex> lock(clientFdsLock);
+                        perror("Send error (menu)");
+                        clientFds.erase(players_map.find(p)->second.getPlayerID());
+                        break;
+                    }
+                }
 }
